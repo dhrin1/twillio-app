@@ -1,0 +1,145 @@
+php composer install
+
+authentication
+
+1.
+composer require php-open-source-saver/jwt-auth
+php artisan vendor:publish --provider="PHPOpenSourceSaver\JWTAuth\Providers\LaravelServiceProvider"
+php artisan jwt:secret
+
+
+2. make controller
+Api/Auth/AuthController
+
+3. make api routes
+unchecked ACCEPT in request headers
+
+4. make request with rules. *check the files
+php artisan make:request LoginRequest
+php artisan make:request RegistrationRequest
+
+5. make a logic for authentication functions controller
+    public function login(LoginRequest $request)
+    {
+        $token = auth()->attempt($request->validated());
+        if($token) {
+            return $this->responseWithToken($token, auth()->user());
+        }else {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Invalid credentials'
+            ], 401);
+        }
+    }
+    public function register( RegistrationRequest $request)
+    {   
+        $user  = User::create($request->validated());
+
+        if($user){
+            $token = auth()->login($user);
+            return $this->responseWithToken($token, $user);
+        }else {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'An error occur while creating user accounts'
+            ],500);
+        }
+    }
+    public function responseWithToken($token, $user) {
+        return response()->json([
+            'status' => 'success',
+            'user' => $user,
+            'access_token' => $token,
+            'type' => 'bearer'
+        ]);
+    }
+
+6. make an verification email using mailtrap.io
+   credentails gmail account of innovention
+    go > inbox
+    make configuration using laravel +9
+
+7. php artisan make:notification EmailVeri
+ficationNotification
+
+and configure /Notifications/EmailVeri
+ficationNotification
+
+
+protected $url;
+    /**
+     * Create a new notification instance.
+     */
+    public function __construct($url)
+    {
+        //
+        $this->url = $url;
+    }
+     return (new MailMessage)
+                    ->subject('Verifify Email Address - Korusental')
+                    ->line("Dear $notifiable->name")
+                    ->line('Thank you for signing up with Korusental Web System! To ensure the security please click verify email.')
+                    ->action('Verify Email', $this->url)
+                    ->line("Do'nt have an account?");
+
+9. make model with migrations
+php artisan make:model EmailVerificationToken -m
+
+protected $guarded = [];
+
+10. make a folder Custom/Services/EmailVerificationService.php
+ <?php
+
+namespace App\Customs\Services;
+
+use App\Models\EmailVerificationToken;
+use App\Notifications\EmailVerificationNotification;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Str;
+
+class EmailVerificationService
+{
+
+   /**
+    * The function sends a verification link to a user via email for email verification.
+    * 
+    * @param object user The `user` parameter in the `senVerificationLink` function is an object that
+    * represents a user. It is used to send an email verification link to the specified user for email
+    * verification purposes.
+    */
+    public function senVerificationLink(object $user): void
+    {
+        Notification::send($user, new EmailVerificationNotification($this->generateVerificationLink($user->email)));
+    }
+
+
+    /**
+     * The function generates a verification link for a given email address by creating a unique token
+     * and storing it in the database with an expiration time.
+     * 
+     * @param email The `generateVerificationLink` function takes an email address as a parameter. It
+     * generates a unique token, creates a verification link with the token and email parameters, saves
+     * the token in the database with an expiration time of 60 minutes, and returns the generated
+     * verification link.
+     * 
+     * @return string The `generateVerificationLink` function returns a string value which is the
+     * generated verification link containing the token and email parameters.
+     */
+    public function generateVerificationLink(string $email): string
+    {
+        $checkIfTokenExists = EmailVerificationToken::where('email', $email)->first();
+        if($checkIfTokenExists) $checkIfTokenExists->delete();
+        $token = Str::uuid();
+        $url = config('app.url')."?token=".$token."&email=".$email;
+        $saveToken = EmailVerificationToken::create([
+            "email" => $email,
+            "token" => $token,
+            "expired_at" => now()->addMinutes(60)
+        ]);
+        if($saveToken) {
+            return $url;
+        }
+    }
+}
+
+11. Go Auth/AuthController
